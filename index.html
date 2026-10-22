@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reserved Seat Picker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: name strip, one wide stage-forward seat map, then the family's own seats and a short how-it-works card. */
+:root {
+  color-scheme: light dark;
+  --font-display: 'Bodoni Moda', 'Bodoni 72', Didot, Georgia, serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  --bg: #EDEEF5; --surface: #FFFFFF; --surface-2: #F4F5FB; --ink: #15172A; --muted: #5B6078; --line: #D3D6E4;
+  --accent: #7A1F45; --accent-ink: #FFFFFF;
+  --open-fill: #FFFFFF; --open-line: #8A90AB; --taken-fill: #BCC0D2; --taken-ink: #666B84; --gen-fill: #E2E4EF;
+  --ok: #1D7549; --warn: #8F5400; --danger: #B3261E; --stage: #15172A; --stage-ink: #EDEEF5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0F1019; --surface: #181A27; --surface-2: #1F2231; --ink: #ECEDF6; --muted: #9A9FB8; --line: #2F3348;
+    --accent: #E8789F; --accent-ink: #1B0A12;
+    --open-fill: #1F2231; --open-line: #6D7390; --taken-fill: #3A3E55; --taken-ink: #8A90AC; --gen-fill: #1A1C2A;
+    --ok: #5CCB92; --warn: #E5B04F; --danger: #FF8A80; --stage: #ECEDF6; --stage-ink: #0F1019;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 14px/1.5 var(--font-body);
+  padding: 22px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font: 700 clamp(26px, 5vw, 38px)/1.1 var(--font-display); letter-spacing: -0.01em; }
+h2 { font: 700 22px/1.2 var(--font-display); }
+h3 { font: 600 13px/1.3 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; }
+.eyebrow { font: 500 11px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.card, .banner, .mapcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.banner { display: grid; gap: 14px; }
+.who { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.sub, .note, .muted { color: var(--muted); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 18px; margin: 0; }
+.facts div { border-left: 3px solid var(--line); padding-left: 10px; min-width: 0; }
+.facts dt { font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 2px 0 0; font-weight: 500; }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font: 500 11px/1.7 var(--font-mono); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: currentColor; }
+.pill.wait { color: var(--warn); border-color: currentColor; }
+.picker { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.input { font: 400 14px var(--font-body); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); min-width: 0; max-width: 100%; }
+.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mapcard { padding: 16px 12px 12px; display: grid; gap: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0 6px; color: var(--muted); font-size: 12px; align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.scrollhint { display: none; padding: 0 6px; font-size: 12px; color: var(--muted); }
+.scroller { overflow-x: auto; padding: 6px 6px 10px; }
+.map { --s: 26px; --g: 4px; display: grid; gap: var(--g); width: max-content; margin: 0 auto; transition: opacity .2s; }
+.map.dim { opacity: .6; }
+.stage { background: var(--stage); color: var(--stage-ink); text-align: center; font: 700 13px var(--font-display); letter-spacing: .5em; text-indent: .5em; padding: 9px 0; border-radius: 4px 4px 22px 22px; margin-bottom: 8px; }
+.row { display: flex; align-items: center; }
+.rl { width: 28px; text-align: center; font: 500 11px var(--font-mono); color: var(--muted); flex: none; }
+.slot { display: flex; justify-content: center; gap: var(--g); flex: none; width: calc(var(--cap) * (var(--s) + var(--g)) - var(--g)); }
+.slot.label { display: block; text-align: center; font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-bottom: 2px; }
+.aisle { width: 28px; flex: none; }
+.zone-note { text-align: center; color: var(--muted); font: 500 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; padding: 6px 0 0; }
+.zone-note.reserve { color: var(--accent); border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; }
+.zone-note.general { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; }
+.seat {
+  width: var(--s); height: var(--s); flex: none; padding: 0;
+  border-radius: 7px 7px 3px 3px; border: 1.5px solid var(--open-line);
+  background: var(--open-fill); color: var(--muted);
+  font: 500 10px/1 var(--font-mono); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.seat:hover { border-color: var(--accent); color: var(--accent); }
+.seat:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seat.taken { background: var(--taken-fill); border-color: var(--taken-fill); color: var(--taken-ink); cursor: not-allowed; }
+.seat.mine { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.seat.hold { background: repeating-linear-gradient(45deg, var(--surface-2) 0 3px, var(--line) 3px 6px); border-style: dashed; }
+.seat.gen { background: var(--gen-fill); border-color: transparent; cursor: default; }
+.seat.sw { cursor: default; width: 18px; height: 18px; border-radius: 5px 5px 2px 2px; }
+.seat.sw:hover { border-color: var(--open-line); color: var(--muted); }
+.seat.sw.mine:hover { border-color: var(--accent); color: var(--accent-ink); }
+.seat.sw.taken:hover { border-color: var(--taken-fill); color: var(--taken-ink); }
+.seat.sw.gen:hover { border-color: transparent; }
+.msg { min-height: 1.5em; padding: 0 6px; font-weight: 500; }
+.msg.warn { color: var(--warn); } .msg.ok { color: var(--ok); } .msg.err { color: var(--danger); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; align-items: start; }
+.stack { display: grid; gap: 14px; min-width: 0; }
+.seatlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.seatlist li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.seatlist .code { font: 500 13px var(--font-mono); color: var(--accent); margin-right: 8px; }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.btn { font: 500 13px var(--font-body); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.btn.small { padding: 4px 10px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:hover { border-color: var(--accent); }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+@media (max-width: 900px) { .scrollhint { display: block; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<noscript>This page needs JavaScript to show the seat map.</noscript>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Reserved seating</p>
+      <h1 id="title">Concert seating</h1>
+    </div>
+    <span class="pill wait" id="offline" hidden>Reconnecting</span>
+  </header>
+
+  <section class="banner" id="banner" aria-live="polite"></section>
+
+  <section class="mapcard" id="mapcard" aria-label="Seat map" hidden>
+    <div class="legend" id="legend"></div>
+    <p class="scrollhint">Scroll sideways to see the whole room.</p>
+    <div class="scroller"><div class="map" id="map"></div></div>
+    <p class="msg" id="msg" role="status"></p>
+  </section>
+
+  <section class="grid2" id="panels" hidden>
+    <div class="card stack">
+      <h3>Your seats</h3>
+      <div id="my-seats"></div>
+    </div>
+    <div class="card stack">
+      <h3>How it works</h3>
+      <ul class="plain">
+        <li>Tap an open seat to reserve it. Tap Release in your list to give one up.</li>
+        <li>Seats are first come, first served, and you can reserve as many as you need.</li>
+        <li>Rows A to E are the reservable rows. Rows nearer the stage are not reservable online, and rows behind them are general seating.</li>
+        <li>Alumni choose their seats on the day of the concert.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ===== Set this to your Apps Script web app URL (see SETUP.md, step 5) ===== */
+const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+
+(function () {
+  'use strict';
+  var KEY = 'seatpicker.family';
+  var BLK_NAME = { L: 'Left', M: 'Center', R: 'Right' };
+  var ZONE_TEXT = { front: 'Not reservable online', reserve: 'Reservable rows', general: 'General seating, no reservation needed' };
+
+  function readId() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function saveId(v) { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) {} }
+  var S = { id: readId(), st: null, sig: '', busy: false, offline: false, pick: '' };
+
+  function $(s) { return document.querySelector(s); }
+  function h(tag, props) {
+    var el = document.createElement(tag);
+    if (props) Object.keys(props).forEach(function (k) {
+      var v = props[k];
+      if (v == null || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v);
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, kid) {
+    if (kid == null || kid === false) return;
+    if (Array.isArray(kid)) { kid.forEach(function (k) { add(el, k); }); return; }
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function seatId(r, b, n) { return r + '-' + b + pad(n); }
+  function seatLabel(id) { var m = /^([A-Z])-([LMR])(\d+)$/.exec(id); return 'Row ' + m[1] + ', ' + BLK_NAME[m[2]] + ', seat ' + Number(m[3]); }
+
+  var msgTimer = 0;
+  function say(text, kind) {
+    var m = $('#msg'); m.textContent = text; m.className = 'msg ' + (kind || '');
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(function () { m.textContent = ''; m.className = 'msg'; }, 8000);
+  }
+
+  function api(action, extra) {
+    // No Content-Type header on purpose: it keeps this a "simple" request, so Apps Script needs no CORS setup.
+    return fetch(API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action: action, id: S.id }, extra || {})) })
+      .then(function (r) { return r.json(); });
+  }
+
+  function errorText(code) {
+    switch (code) {
+      case 'closed': return 'Seat picking is closed. Contact the organizer to make a change.';
+      case 'taken': return 'Someone just took that seat. Pick another.';
+      case 'already_yours': return 'That seat is already yours.';
+      case 'not_reservable': return 'That seat is not reservable. Only rows A to E can be reserved online.';
+      case 'not_yours': return 'That seat is not one of yours.';
+      case 'busy': return 'Lots of people are picking right now. Try again in a moment.';
+      case 'full': return 'The seating sheet is full. Tell the organizer.';
+      case 'unknown_family': return 'We could not find your family on the list. Choose your name again.';
+      default: return 'Something went wrong. Reload the page and try again.';
+    }
+  }
+
+  function apply(r, okText) {
+    if (r && r.layout) {
+      S.st = r; S.sig = JSON.stringify(r);
+      if (S.id && !r.family) { S.id = ''; saveId(''); }
+    }
+    if (r && r.error === 'unknown_family') { S.id = ''; saveId(''); S.sig = ''; say(errorText(r.error), 'warn'); refresh(); return; }
+    if (r && r.error) say(errorText(r.error), 'warn');
+    else if (okText) say(okText, 'ok');
+    render();
+  }
+
+  function act(action, id, okText) {
+    if (S.busy) return;
+    S.busy = true; render();
+    api(action, { seat: id })
+      .then(function (r) { S.busy = false; apply(r, okText); })
+      .catch(function () { S.busy = false; say('Could not reach the seating service. Check your connection and try again.', 'err'); render(); });
+  }
+
+  function onSeat(id) {
+    var st = S.st; if (!st) return;
+    if (!st.family) return say('Choose your family above first.', 'warn');
+    if (!st.open) return say(errorText('closed'), 'warn');
+    var cur = st.seats[id];
+    if (cur === 'mine') return say('That is one of your seats. Use Release in your list below to give it up.');
+    if (cur) return say(cur === 'hold' ? 'That seat is held by the organizer.' : 'That seat is taken.', 'warn');
+    act('claim', id, seatLabel(id) + ' is yours.');
+  }
+
+  function renderBanner() {
+    var b = $('#banner'); b.replaceChildren();
+    if (!/^https:\/\//.test(API_URL)) { b.append(h('p', { class: 'note' }, 'This page is not connected to the seating sheet yet. Paste the web app URL into API_URL in index.html.')); return; }
+    if (!S.st) { b.append(h('p', { class: 'note' }, S.offline ? 'Could not reach the seating service. Trying again.' : 'Loading the seating chart.')); return; }
+    var st = S.st, f = st.family;
+    if (!f) {
+      if (!st.families) { b.append(h('p', { class: 'note' }, 'Loading the family list.')); return; }
+      if (!st.families.length) { b.append(h('p', { class: 'note' }, 'The organizer has not added families yet. Check back soon.')); return; }
+      var sel = h('select', { class: 'input', id: 'who', 'aria-label': 'Your family', onchange: function (e) { S.pick = e.target.value; } },
+        h('option', { value: '' }, 'Choose your family'),
+        st.families.map(function (x) { return h('option', { value: x.id }, x.name + (x.performer ? ' (' + x.performer + ')' : '')); }));
+      sel.value = S.pick;
+      b.append(
+        h('div', null, h('p', { class: 'eyebrow' }, 'Step one'), h('h2', null, 'Who is picking seats?'),
+          h('p', { class: 'sub' }, 'Choose your family from the list. You can look at the map below before you choose.')),
+        h('div', { class: 'picker' }, sel,
+          h('button', { class: 'btn primary', type: 'button', onclick: function () {
+            if (!sel.value) return say('Choose your family from the list first.', 'warn');
+            S.id = sel.value; saveId(S.id); S.pick = ''; S.sig = ''; refresh();
+          } }, 'Continue')));
+      return;
+    }
+    var who = f.performer ? 'Family of ' + f.performer + (f.year ? ' (' + f.year + ')' : '') : '';
+    b.append(
+      h('div', { class: 'who' },
+        h('div', null, h('p', { class: 'eyebrow' }, 'Reserving as'), h('h2', null, f.name), who ? h('p', { class: 'sub' }, who) : null),
+        h('button', { class: 'btn small', type: 'button', onclick: function () {
+          S.id = ''; saveId(''); S.sig = '';
+          if (S.st) { S.st = Object.assign({}, S.st, { family: null, families: null, mySeats: [] }); }
+          render(); refresh();
+        } }, 'Not you?')),
+      h('dl', { class: 'facts' },
+        h('div', null, h('dt', null, 'Seats picked'), h('dd', null, String(st.mySeats.length))),
+        h('div', null, h('dt', null, 'Seat picking'), h('dd', null, h('span', { class: 'pill ' + (st.open ? 'ok' : 'wait') }, st.open ? 'open' : 'closed')))
+      )
+    );
+  }
+
+  function seatEl(row, blk, n, st) {
+    if (!row.reservable) return h('span', { class: 'seat gen', 'aria-hidden': 'true' });
+    var id = seatId(row.row, blk, n), cur = st.seats[id], cls = 'seat', state = 'open';
+    if (cur === 'mine') { cls += ' mine'; state = 'yours'; }
+    else if (cur === 'hold') { cls += ' hold'; state = 'held'; }
+    else if (cur) { cls += ' taken'; state = 'taken'; }
+    return h('button', { type: 'button', class: cls, 'aria-label': seatLabel(id) + ', ' + state, title: seatLabel(id) + ', ' + state, onclick: function () { onSeat(id); } }, String(n));
+  }
+
+  function renderMap() {
+    var st = S.st, box = $('#map'); if (!st) return;
+    var cap = { L: 0, M: 0, R: 0 };
+    st.layout.forEach(function (r) { ['L', 'M', 'R'].forEach(function (b) { cap[b] = Math.max(cap[b], r[b]); }); });
+    box.classList.toggle('dim', S.busy);
+    box.replaceChildren();
+    box.append(h('div', { class: 'stage' }, 'STAGE'));
+    box.append(h('div', { class: 'row' }, h('span', { class: 'rl' }),
+      ['L', 'M', 'R'].map(function (b, i) {
+        return [i ? h('div', { class: 'aisle' }) : null, h('div', { class: 'slot label', style: '--cap:' + cap[b] }, BLK_NAME[b])];
+      }), h('span', { class: 'rl' })));
+    var zone = '';
+    st.layout.forEach(function (row) {
+      if (row.zone !== zone) { zone = row.zone; box.append(h('div', { class: 'zone-note ' + zone }, ZONE_TEXT[zone] || '')); }
+      var lbl = row.label != null ? row.label : row.row;
+      box.append(h('div', { class: 'row' }, h('span', { class: 'rl' }, lbl),
+        ['L', 'M', 'R'].map(function (b, i) {
+          var slot = h('div', { class: 'slot', style: '--cap:' + cap[b] });
+          for (var n = 1; n <= row[b]; n++) slot.append(seatEl(row, b, n, st));
+          return [i ? h('div', { class: 'aisle' }) : null, slot];
+        }), h('span', { class: 'rl' }, lbl)));
+    });
+  }
+
+  function renderLegend() {
+    var l = $('#legend');
+    [['', 'Open'], ['mine', 'Yours'], ['taken', 'Taken'], ['hold', 'Held by organizer'], ['gen', 'Not reservable online']]
+      .forEach(function (it) { l.append(h('span', null, h('span', { class: 'seat sw ' + it[0], 'aria-hidden': 'true' }), it[1])); });
+  }
+
+  function armed(btn, run) {
+    var t = 0, old = btn.textContent;
+    btn.addEventListener('click', function () {
+      if (!t) { btn.textContent = 'Confirm'; btn.classList.add('danger'); t = setTimeout(function () { t = 0; btn.textContent = old; btn.classList.remove('danger'); }, 4000); return; }
+      clearTimeout(t); t = 0; run();
+    });
+  }
+
+  function renderPanels() {
+    var st = S.st; if (!st) return;
+    var box = $('#my-seats'); box.replaceChildren();
+    if (!st.family) box.append(h('p', { class: 'note' }, 'Choose your family above to start picking seats.'));
+    else if (!st.mySeats.length) box.append(h('p', { class: 'note' }, 'No seats picked yet. Tap an open seat on the map.'));
+    else {
+      var ul = h('ul', { class: 'seatlist' });
+      st.mySeats.forEach(function (id) {
+        var btn = h('button', { class: 'btn small', type: 'button' }, 'Release');
+        armed(btn, function () { act('release', id, seatLabel(id) + ' released.'); });
+        ul.append(h('li', null, h('span', null, h('span', { class: 'code' }, id), seatLabel(id)), btn));
+      });
+      box.append(ul);
+    }
+  }
+
+  function render() {
+    $('#title').textContent = (S.st && S.st.title) || 'Concert seating';
+    $('#offline').hidden = !S.offline;
+    $('#mapcard').hidden = $('#panels').hidden = !S.st;
+    renderBanner();
+    if (S.st) { renderMap(); renderPanels(); }
+  }
+
+  function refresh() {
+    if (S.busy || !/^https:\/\//.test(API_URL)) return;
+    api('state').then(function (r) {
+      var wasOffline = S.offline; S.offline = false;
+      if (!r || !r.layout) return;
+      if (S.id && !r.family) { S.id = ''; saveId(''); }
+      var sig = JSON.stringify(r);
+      if (sig === S.sig && !wasOffline) return;   // nothing changed: leave the page alone so an open dropdown stays open
+      S.sig = sig; S.st = r; render();
+    }).catch(function () { if (!S.offline) { S.offline = true; render(); } });
+  }
+
+  renderLegend();
+  render();
+  refresh();
+  setInterval(function () { if (!document.hidden) refresh(); }, 8000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+})();
+</script>
+</body>
+</html>
